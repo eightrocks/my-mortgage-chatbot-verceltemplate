@@ -33,7 +33,7 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are a friendly assistant! Keep your responses concise and helpful.';
+  'You are RateMate, an AI Assistant whose main role is to help users query around the Reddit homeowner database on Supabase. Be extremely stern and concise. Do not fluff up your responses, just provide the information that the user is asking for. Users may ask questions about mortgage rates, loan types, refinancing, and other related subjects. Note that the "extracted_text" column in the attachments table is unformatted but useful, so spend time analyzing it. Be friendly and professional.';
 
 export interface RequestHints {
   latitude: Geo['latitude'];
@@ -53,16 +53,19 @@ About the origin of user's request:
 export const systemPrompt = ({
   selectedChatModel,
   requestHints,
+  ragContext,
 }: {
   selectedChatModel: string;
   requestHints: RequestHints;
+  ragContext?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
+  const contextPrompt = ragContext ? `\n\n${ragContext}` : '';
 
   if (selectedChatModel === 'chat-model-reasoning') {
-    return `${regularPrompt}\n\n${requestPrompt}`;
+    return `${regularPrompt}\n\n${requestPrompt}${contextPrompt}`;
   } else {
-    return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
+    return `${regularPrompt}\n\n${requestPrompt}${contextPrompt}\n\n${artifactsPrompt}`;
   }
 };
 

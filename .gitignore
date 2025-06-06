@@ -41,3 +41,8 @@ yarn-error.log*
 /playwright-report/
 /blob-report/
 /playwright/*
+
+# Claude Code and MCP files
+.mcp.json
+.claude/
+tsconfig.tsbuildinfo

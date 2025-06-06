@@ -23,9 +23,11 @@ import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
+import { queryDatabase } from '@/lib/ai/tools/query-database';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { getRAGContext, formatRAGContext } from '@/lib/rag';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
 import {
@@ -145,10 +147,19 @@ export async function POST(request: Request) {
     await createStreamId({ streamId, chatId: id });
 
     const stream = createDataStream({
-      execute: (dataStream) => {
+      execute: async (dataStream) => {
+        // Get RAG context based on the user's message
+        const userMessageText = message.parts
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join(' ');
+        
+        const { context, dbStats } = await getRAGContext(userMessageText);
+        const ragContext = formatRAGContext(context, dbStats);
+        
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
+          system: systemPrompt({ selectedChatModel, requestHints, ragContext }),
           messages,
           maxSteps: 5,
           experimental_activeTools:
@@ -159,6 +170,7 @@ export async function POST(request: Request) {
                   'createDocument',
                   'updateDocument',
                   'requestSuggestions',
+                  'queryDatabase',
                 ],
           experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_generateMessageId: generateUUID,
@@ -170,6 +182,7 @@ export async function POST(request: Request) {
               session,
               dataStream,
             }),
+            queryDatabase,
           },
           onFinish: async ({ response }) => {
             if (session.user?.id) {
