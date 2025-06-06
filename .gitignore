@@ -46,3 +46,6 @@ yarn-error.log*
 .mcp.json
 .claude/
 tsconfig.tsbuildinfo
+my-mortgage-chatbot/
+aws-s3.mdc
+mortgage_tool_improvements.md

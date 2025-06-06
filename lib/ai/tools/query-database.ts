@@ -21,9 +21,10 @@ export const queryDatabase = tool({
       // Define the schema for structured output
       const QueryIntentSchema = z.object({
         queryType: z.enum(['count', 'list', 'aggregate']),
-        timeframe: z.enum(['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month', 'last_24_hours', 'last_7_days', 'last_30_days']).nullable(),
+        timeframe: z.enum(['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'last_month', 'last_24_hours', 'last_7_days', 'last_30_days', 'year']).nullable(),
         limit: z.number().nullable(),
-        description: z.string()
+        description: z.string(),
+        year: z.number().nullable()
       });
 
       // Use OpenAI with structured output to parse the question
@@ -39,9 +40,11 @@ export const queryDatabase = tool({
             content: `You are a SQL query intent parser. Analyze the user's question and extract the intent.
 
 Examples:
-- "How many posts were there today?" -> queryType: "count", timeframe: "today", limit: null, description: "today"
-- "Show me 5 recent posts" -> queryType: "list", timeframe: null, limit: 5, description: "recent"
-- "How many posts in the last 24 hours?" -> queryType: "count", timeframe: "last_24_hours", limit: null, description: "in the last 24 hours"`
+- "How many posts were there today?" -> queryType: "count", timeframe: "today", limit: null, description: "today", year: null
+- "Show me 5 recent posts" -> queryType: "list", timeframe: null, limit: 5, description: "recent", year: null
+- "How many posts in the last 24 hours?" -> queryType: "count", timeframe: "last_24_hours", limit: null, description: "in the last 24 hours", year: null
+- "How many posts in 2024?" -> queryType: "count", timeframe: "year", limit: null, description: "in 2024", year: 2024
+- "Posts from 2023" -> queryType: "list", timeframe: "year", limit: null, description: "from 2023", year: 2023`
           },
           {
             role: "user",
@@ -65,7 +68,7 @@ Examples:
       // Generate date filters based on parsed timeframe
       let dateCondition = '';
       if (intent.timeframe) {
-        const dateFilter = parseTimeframe(intent.timeframe);
+        const dateFilter = parseTimeframe(intent.timeframe, intent.year);
         if (dateFilter) {
           dateCondition = `WHERE created_at >= '${dateFilter.start}'`;
           if (dateFilter.end) {
@@ -82,7 +85,7 @@ Examples:
         let supabaseQuery = supabase.from('posts').select('*', { count: 'exact', head: true });
         
         if (intent.timeframe) {
-          const dateFilter = parseTimeframe(intent.timeframe);
+          const dateFilter = parseTimeframe(intent.timeframe, intent.year);
           if (dateFilter) {
             supabaseQuery = supabaseQuery.gte('created_at', dateFilter.start);
             if (dateFilter.end) {
@@ -148,8 +151,18 @@ Examples:
   }
 });
 
-function parseTimeframe(timeframe: string): { start: string; end?: string; description: string } | null {
+function parseTimeframe(timeframe: string, year?: number | null): { start: string; end?: string; description: string } | null {
   const now = new Date();
+  
+  if (timeframe === 'year' && year) {
+    const startOfYear = new Date(year, 0, 1);
+    const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
+    return {
+      start: startOfYear.toISOString(),
+      end: endOfYear.toISOString(),
+      description: `in ${year}`
+    };
+  }
   
   switch (timeframe) {
     case 'today':
