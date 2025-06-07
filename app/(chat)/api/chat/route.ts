@@ -24,6 +24,7 @@ import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { queryDatabase } from '@/lib/ai/tools/query-database';
+import { suggestWidgets } from '@/lib/ai/tools/suggest-widgets';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
           .map(part => part.text)
           .join(' ');
         
-        const { context, dbStats } = await getRAGContext(userMessageText);
+        const { context, widgets, dbStats } = await getRAGContext(userMessageText);
         const ragContext = formatRAGContext(context, dbStats);
         
         const result = streamText({
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
                   'updateDocument',
                   'requestSuggestions',
                   'queryDatabase',
+                  'suggestWidgets',
                 ],
           experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_generateMessageId: generateUUID,
@@ -183,6 +185,7 @@ export async function POST(request: Request) {
               dataStream,
             }),
             queryDatabase,
+            suggestWidgets,
           },
           onFinish: async ({ response }) => {
             if (session.user?.id) {

@@ -31,6 +31,7 @@ yarn-error.log*
 
 # turbo
 .turbo
+Perplexica-master/
 
 .env
 .vercel

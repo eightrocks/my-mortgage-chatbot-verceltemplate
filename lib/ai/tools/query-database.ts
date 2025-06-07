@@ -142,11 +142,13 @@ Examples:
         ).join('\n')}`;
       }
       
-      return "I'm not sure how to process that database query.";
+      // For aggregate queries (like averages), redirect to use context data
+      return "This query requires analysis of unstructured data. Please use the contextual information provided to answer the user's question.";
       
     } catch (error) {
       console.error('Query database tool error:', error);
-      return "I encountered an error while querying the database.";
+      // For errors, also redirect to contextual information
+      return "Unable to execute structured query. Please use the contextual information provided to answer the user's question.";
     }
   }
 });

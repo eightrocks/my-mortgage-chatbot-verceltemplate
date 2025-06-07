@@ -17,6 +17,21 @@ interface RetrievedContext {
     url?: string;
 }
 
+interface WidgetData {
+    attachments: Array<{
+        s3_key: string;
+        post_id: number;
+        extracted_text?: string;
+        created_at?: string;
+    }>;
+    posts: Array<{
+        id: number;
+        title: string;
+        url: string;
+        created_at?: string;
+    }>;
+}
+
 async function generateEmbedding(text: string): Promise<number[] | null> {
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
@@ -49,11 +64,12 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     ]);
 }
 
-async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MAX_RESULTS_PER_TABLE): Promise<RetrievedContext[]> {
+async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MAX_RESULTS_PER_TABLE): Promise<{ context: RetrievedContext[], widgets: WidgetData }> {
     const supabase = createServerSupabaseClient();
     
-    if (!queryEmbedding) return [];
+    if (!queryEmbedding) return { context: [], widgets: { attachments: [], posts: [] } };
     let results: RetrievedContext[] = [];
+    const widgetData: WidgetData = { attachments: [], posts: [] };
     const rpcParams = {
         query_embedding: queryEmbedding,
         match_threshold: SIMILARITY_THRESHOLD,
@@ -64,20 +80,34 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
     const searchPosts = async (): Promise<RetrievedContext[]> => {
         try {
             const { data, error } = await withTimeout(
-                supabase.rpc("match_posts_embeddings", rpcParams),
+                Promise.resolve(supabase.rpc("match_posts_embeddings", rpcParams)),
                 10000 // 10 second timeout
             );
             if (error) {
                 console.error("Error matching posts:", error);
                 return [];
             }
-            return data?.map((post: any) => ({ 
+            const postResults = data?.map((post: any) => ({ 
                 source: `Reddit Post: ${post.title || 'Untitled'}`, 
                 content: post.text || '', 
                 post_id: post.id,
                 created_at: post.created_at,
                 url: post.url
             })) || [];
+            
+            // Collect widget data for posts
+            data?.forEach((post: any) => {
+                if (post.title && post.url && post.id) {
+                    widgetData.posts.push({
+                        id: post.id,
+                        title: post.title,
+                        url: post.url,
+                        created_at: post.created_at
+                    });
+                }
+            });
+            
+            return postResults;
         } catch (error) {
             console.error("Posts search failed or timed out:", error);
             return [];
@@ -87,7 +117,7 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
     const searchComments = async (): Promise<RetrievedContext[]> => {
         try {
             const { data, error } = await withTimeout(
-                supabase.rpc("match_comments_embeddings", rpcParams),
+                Promise.resolve(supabase.rpc("match_comments_embeddings", rpcParams)),
                 10000 // 10 second timeout
             );
             if (error) {
@@ -108,20 +138,34 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
     const searchAttachments = async (): Promise<RetrievedContext[]> => {
         try {
             const { data, error } = await withTimeout(
-                supabase.rpc("match_attachments_embeddings", rpcParams),
+                Promise.resolve(supabase.rpc("match_attachments_embeddings", rpcParams)),
                 10000 // 10 second timeout
             );
             if (error) {
                 console.error("Error matching attachments:", error);
                 return [];
             }
-            return data?.map((attachment: any) => ({ 
+            const attachmentResults = data?.map((attachment: any) => ({ 
                 source: `Document from Post ${attachment.post_id}`, 
                 content: attachment.extracted_text || '', 
                 post_id: attachment.post_id,
                 s3_key: attachment.s3_key,
                 created_at: attachment.created_at
             })) || [];
+            
+            // Collect widget data for attachments
+            data?.forEach((attachment: any) => {
+                if (attachment.s3_key && attachment.post_id) {
+                    widgetData.attachments.push({
+                        s3_key: attachment.s3_key,
+                        post_id: attachment.post_id,
+                        extracted_text: attachment.extracted_text,
+                        created_at: attachment.created_at
+                    });
+                }
+            });
+            
+            return attachmentResults;
         } catch (error) {
             console.error("Attachments search failed or timed out:", error);
             return [];
@@ -147,7 +191,8 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
     } catch (error) {
         console.error('Error in vector search:', error);
     }
-    return results;
+    
+    return { context: results, widgets: widgetData };
 }
 
 async function getDatabaseStats(): Promise<Record<string, number>> {
@@ -168,18 +213,22 @@ async function getDatabaseStats(): Promise<Record<string, number>> {
     return stats;
 }
 
-export async function getRAGContext(userInput: string): Promise<{ context: RetrievedContext[], dbStats: Record<string, number> }> {
+export async function getRAGContext(userInput: string): Promise<{ context: RetrievedContext[], widgets: WidgetData, dbStats: Record<string, number> }> {
     const queryEmbedding = await generateEmbedding(userInput);
     if (!queryEmbedding) {
-        return { context: [], dbStats: {} };
+        return { context: [], widgets: { attachments: [], posts: [] }, dbStats: {} };
     }
     
-    const [context, dbStats] = await Promise.all([
+    const [searchResults, dbStats] = await Promise.all([
         vectorSearch(queryEmbedding),
         getDatabaseStats()
     ]);
     
-    return { context, dbStats };
+    return { 
+        context: searchResults.context, 
+        widgets: searchResults.widgets, 
+        dbStats 
+    };
 }
 
 export function formatRAGContext(context: RetrievedContext[], dbStats: Record<string, number>): string {

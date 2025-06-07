@@ -11,6 +11,7 @@ import { Markdown } from './markdown';
 import { MessageActions } from './message-actions';
 import { PreviewAttachment } from './preview-attachment';
 import { Weather } from './weather';
+import { WidgetContainer } from './widgets/widget-container';
 import equal from 'fast-deep-equal';
 import { cn, sanitizeText } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -212,6 +213,10 @@ const PurePreviewMessage = ({
                           result={result}
                           isReadonly={isReadonly}
                         />
+                      ) : toolName === 'suggestWidgets' ? (
+                        <WidgetContainer widgetData={result} />
+                      ) : toolName === 'queryDatabase' ? (
+                        <div className="text-sm">{result}</div>
                       ) : (
                         <pre>{JSON.stringify(result, null, 2)}</pre>
                       )}
