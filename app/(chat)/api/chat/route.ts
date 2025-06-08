@@ -28,7 +28,7 @@ import { suggestWidgets } from '@/lib/ai/tools/suggest-widgets';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { getRAGContext, formatRAGContext } from '@/lib/rag';
+import { getRAGContext, formatRAGContext, formatRAGContextWithSources } from '@/lib/rag';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
 import {
@@ -155,8 +155,30 @@ export async function POST(request: Request) {
           .map(part => part.text)
           .join(' ');
         
-        const { context, widgets, dbStats } = await getRAGContext(userMessageText);
-        const ragContext = formatRAGContext(context, dbStats);
+        const { context, widgets, sources, dbStats } = await getRAGContext(userMessageText);
+        const ragContext = formatRAGContextWithSources(context, sources, dbStats);
+        
+        // Send sources to frontend for Perplexica-style display
+        if (sources.length > 0) {
+          // Generate presigned URLs for attachment sources on server-side
+          const sourcesWithUrls = await Promise.all(
+            sources.map(async (source) => {
+              if (source.type === 'attachment' && source.s3_key) {
+                try {
+                  const { generatePresignedUrl } = await import('@/lib/s3');
+                  const presignedUrl = await generatePresignedUrl(source.s3_key);
+                  return { ...source, url: presignedUrl };
+                } catch (error) {
+                  console.error(`Failed to generate URL for ${source.s3_key}:`, error);
+                  return source; // Return without URL if generation fails
+                }
+              }
+              return source; // Posts and comments already have URLs
+            })
+          );
+          
+          dataStream.writeData({ type: 'sources', sources: sourcesWithUrls });
+        }
         
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),

@@ -3,7 +3,7 @@
 import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useState } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { PencilEditIcon, SparklesIcon } from './icons';
@@ -21,6 +21,58 @@ import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
 
+interface SourceItem {
+  type: 'attachment' | 'post' | 'comment';
+  title: string;
+  url?: string;
+  s3_key?: string;
+  post_id?: number;
+  created_at?: string;
+}
+
+// Function to parse citations and make them clickable - Perplexity style
+function parseCitations(text: string, sources: SourceItem[]): string {
+  const citationRegex = /\[([^\]]+)\]/g;
+  
+  // First convert basic markdown to HTML
+  let html = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+  
+  // Wrap in paragraph tags
+  html = `<p>${html}</p>`;
+  
+  // Then replace citations with clickable links
+  html = html.replace(citationRegex, (match, capturedContent: string) => {
+    const numbers = capturedContent.split(',').map((numStr) => numStr.trim());
+    
+    const linksHtml = numbers
+      .map((numStr) => {
+        const number = parseInt(numStr);
+        if (isNaN(number) || number < 1 || number > sources.length) {
+          return `[${numStr}]`; // Return as-is if invalid
+        }
+        
+        const source = sources[number - 1];
+        if (!source) return `[${numStr}]`;
+        
+        // Create clickable link that opens URL directly
+        if (source.url) {
+          return `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded text-xs font-mono hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5">${numStr}</a>`;
+        } else {
+          return `<a href="#source-${number}" class="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded text-xs font-mono hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5">${numStr}</a>`;
+        }
+      })
+      .join('');
+    
+    return linksHtml;
+  });
+  
+  return html;
+}
+
 const PurePreviewMessage = ({
   chatId,
   message,
@@ -30,6 +82,7 @@ const PurePreviewMessage = ({
   reload,
   isReadonly,
   requiresScrollPadding,
+  sources,
 }: {
   chatId: string;
   message: UIMessage;
@@ -39,6 +92,7 @@ const PurePreviewMessage = ({
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
   requiresScrollPadding: boolean;
+  sources?: SourceItem[];
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 
@@ -131,8 +185,50 @@ const PurePreviewMessage = ({
                             message.role === 'user',
                         })}
                       >
-                        <Markdown>{sanitizeText(part.text)}</Markdown>
+                        {message.role === 'assistant' && sources?.length ? (
+                          <div 
+                            className="prose prose-sm max-w-none dark:prose-invert"
+                            dangerouslySetInnerHTML={{ 
+                              __html: parseCitations(sanitizeText(part.text), sources) 
+                            }} 
+                          />
+                        ) : (
+                          <Markdown>{sanitizeText(part.text)}</Markdown>
+                        )}
                       </div>
+
+                      {/* Sources List - Below the message */}
+                      {message.role === 'assistant' && sources && sources.length > 0 && (
+                        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                          <div className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Sources</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {sources.map((source, index) => (
+                              <a
+                                key={index}
+                                href={source.url || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                id={`source-${index + 1}`}
+                                className={cn(
+                                  "flex items-center gap-2 p-2 bg-white dark:bg-gray-700 rounded border transition-colors text-sm",
+                                  source.url 
+                                    ? "hover:bg-gray-50 dark:hover:bg-gray-600" 
+                                    : "cursor-not-allowed opacity-50"
+                                )}
+                                onClick={!source.url ? (e) => e.preventDefault() : undefined}
+                              >
+                                <span className="font-mono text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded">
+                                  {index + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="truncate font-medium">{source.title}</div>
+                                  <div className="text-xs text-gray-500 capitalize">{source.type}</div>
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -251,6 +347,7 @@ export const PreviewMessage = memo(
       return false;
     if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
     if (!equal(prevProps.vote, nextProps.vote)) return false;
+    if (!equal(prevProps.sources, nextProps.sources)) return false;
 
     return true;
   },

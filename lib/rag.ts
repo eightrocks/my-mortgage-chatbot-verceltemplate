@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSION = 1536;
 const SIMILARITY_THRESHOLD = 0.3; // Increased threshold for better performance
-const MAX_RESULTS_PER_TABLE = 5; // Reduced for better performance
+const MAX_RESULTS_PER_TABLE = 2; // Limit to 2 per table for cleaner citations
 const MAX_CONTEXT_LENGTH = 3000;
 
 interface RetrievedContext {
@@ -15,6 +15,15 @@ interface RetrievedContext {
     s3_key?: string;
     created_at?: string;
     url?: string;
+}
+
+interface SourceItem {
+    type: 'attachment' | 'post' | 'comment';
+    title: string;
+    url?: string; // For posts, or presigned URL for attachments (generated later)
+    s3_key?: string; // For attachments
+    post_id?: number;
+    created_at?: string;
 }
 
 interface WidgetData {
@@ -64,12 +73,13 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     ]);
 }
 
-async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MAX_RESULTS_PER_TABLE): Promise<{ context: RetrievedContext[], widgets: WidgetData }> {
+async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MAX_RESULTS_PER_TABLE): Promise<{ context: RetrievedContext[], widgets: WidgetData, sources: SourceItem[] }> {
     const supabase = createServerSupabaseClient();
     
-    if (!queryEmbedding) return { context: [], widgets: { attachments: [], posts: [] } };
+    if (!queryEmbedding) return { context: [], widgets: { attachments: [], posts: [] }, sources: [] };
     let results: RetrievedContext[] = [];
     const widgetData: WidgetData = { attachments: [], posts: [] };
+    const sources: SourceItem[] = [];
     const rpcParams = {
         query_embedding: queryEmbedding,
         match_threshold: SIMILARITY_THRESHOLD,
@@ -95,13 +105,22 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
                 url: post.url
             })) || [];
             
-            // Collect widget data for posts
+            // Collect widget data and sources for posts
             data?.forEach((post: any) => {
                 if (post.title && post.url && post.id) {
                     widgetData.posts.push({
                         id: post.id,
                         title: post.title,
                         url: post.url,
+                        created_at: post.created_at
+                    });
+                    
+                    // Add to sources array for citations
+                    sources.push({
+                        type: 'post',
+                        title: post.title,
+                        url: post.url,
+                        post_id: post.id,
                         created_at: post.created_at
                     });
                 }
@@ -153,13 +172,24 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
                 created_at: attachment.created_at
             })) || [];
             
-            // Collect widget data for attachments
+            // Collect widget data and sources for attachments
             data?.forEach((attachment: any) => {
                 if (attachment.s3_key && attachment.post_id) {
                     widgetData.attachments.push({
                         s3_key: attachment.s3_key,
                         post_id: attachment.post_id,
                         extracted_text: attachment.extracted_text,
+                        created_at: attachment.created_at
+                    });
+                    
+                    // Add to sources array for citations
+                    // Generate a descriptive title based on s3_key
+                    const fileName = attachment.s3_key.split('/').pop() || attachment.s3_key;
+                    sources.push({
+                        type: 'attachment',
+                        title: fileName,
+                        s3_key: attachment.s3_key,
+                        post_id: attachment.post_id,
                         created_at: attachment.created_at
                     });
                 }
@@ -192,7 +222,7 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         console.error('Error in vector search:', error);
     }
     
-    return { context: results, widgets: widgetData };
+    return { context: results, widgets: widgetData, sources };
 }
 
 async function getDatabaseStats(): Promise<Record<string, number>> {
@@ -213,10 +243,10 @@ async function getDatabaseStats(): Promise<Record<string, number>> {
     return stats;
 }
 
-export async function getRAGContext(userInput: string): Promise<{ context: RetrievedContext[], widgets: WidgetData, dbStats: Record<string, number> }> {
+export async function getRAGContext(userInput: string): Promise<{ context: RetrievedContext[], widgets: WidgetData, sources: SourceItem[], dbStats: Record<string, number> }> {
     const queryEmbedding = await generateEmbedding(userInput);
     if (!queryEmbedding) {
-        return { context: [], widgets: { attachments: [], posts: [] }, dbStats: {} };
+        return { context: [], widgets: { attachments: [], posts: [] }, sources: [], dbStats: {} };
     }
     
     const [searchResults, dbStats] = await Promise.all([
@@ -226,7 +256,8 @@ export async function getRAGContext(userInput: string): Promise<{ context: Retri
     
     return { 
         context: searchResults.context, 
-        widgets: searchResults.widgets, 
+        widgets: searchResults.widgets,
+        sources: searchResults.sources,
         dbStats 
     };
 }
@@ -244,4 +275,36 @@ export function formatRAGContext(context: RetrievedContext[], dbStats: Record<st
     }
     
     return `Database stats: ${statsString}\n\nRelevant information from r/firsttimehomebuyer:\n\n${contextText}`;
+}
+
+export function formatRAGContextWithSources(context: RetrievedContext[], sources: SourceItem[], dbStats: Record<string, number>): string {
+    const statsString = `Posts: ${dbStats.posts}, Comments: ${dbStats.comments}, Attachments: ${dbStats.attachments}`;
+    
+    if (context.length === 0 && sources.length === 0) {
+        return `Database stats: ${statsString}`;
+    }
+    
+    let result = `Database stats: ${statsString}\n\n`;
+    
+    // Add numbered sources for citation
+    if (sources.length > 0) {
+        result += `SOURCES FOR CITATION:\n`;
+        sources.forEach((source, index) => {
+            const sourceNum = index + 1;
+            result += `[${sourceNum}] ${source.title} (${source.type})\n`;
+        });
+        result += `\nWhen referencing information from these sources, use [1], [2], [3] etc. in your response.\n\n`;
+    }
+    
+    // Add context content
+    if (context.length > 0) {
+        result += `CONTEXT FROM r/firsttimehomebuyer:\n\n`;
+        let contextText = context.map(item => `${item.source}\n${item.content}`).join('\n\n');
+        if (contextText.length > MAX_CONTEXT_LENGTH) {
+            contextText = contextText.substring(0, MAX_CONTEXT_LENGTH) + "...";
+        }
+        result += contextText;
+    }
+    
+    return result;
 }

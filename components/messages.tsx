@@ -1,7 +1,7 @@
 import type { UIMessage } from 'ai';
 import { PreviewMessage, ThinkingMessage } from './message';
 import { Greeting } from './greeting';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
@@ -17,6 +17,7 @@ interface MessagesProps {
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
   isArtifactVisible: boolean;
+  streamData?: any[];
 }
 
 function PureMessages({
@@ -27,6 +28,7 @@ function PureMessages({
   setMessages,
   reload,
   isReadonly,
+  streamData,
 }: MessagesProps) {
   const {
     containerRef: messagesContainerRef,
@@ -38,6 +40,18 @@ function PureMessages({
     chatId,
     status,
   });
+
+  // Extract sources from stream data for Perplexica-style display
+  const currentSources = useMemo(() => {
+    if (!streamData?.length) return [];
+    
+    // Find the latest sources data
+    const sourcesData = streamData
+      .filter(item => item?.type === 'sources')
+      .pop();
+    
+    return sourcesData?.sources || [];
+  }, [streamData]);
 
   return (
     <div
@@ -63,6 +77,7 @@ function PureMessages({
           requiresScrollPadding={
             hasSentMessage && index === messages.length - 1
           }
+          sources={currentSources}
         />
       ))}
 

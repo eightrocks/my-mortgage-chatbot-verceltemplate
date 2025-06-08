@@ -1,0 +1,24 @@
+
+> ai-chatbot@3.0.23 dev
+> next dev --turbo
+
+   Downloading swc package @next/swc-wasm-nodejs... to /home/fred/.cache/next-swc
+ ⚠ Attempted to load @next/swc-linux-x64-gnu, but it was not installed
+ ⚠ Attempted to load @next/swc-linux-x64-musl, but an error occurred: libc.musl-x86_64.so.1: cannot open shared object file: No such file or directory
+ ⚠ Attempted to load @next/swc-linux-x64-gnu, but it was not installed
+ ⚠ Attempted to load @next/swc-linux-x64-musl, but an error occurred: libc.musl-x86_64.so.1: cannot open shared object file: No such file or directory
+   ▲ Next.js 15.3.0-canary.31 (Turbopack)
+   - Local:        http://localhost:3000
+   - Network:      http://10.255.255.254:3000
+   - Environments: .env.local
+   - Experiments (use with caution):
+     ✓ ppr
+
+ ✓ Starting...
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+[Error: `turbo.createProject` is not supported by the wasm bindings.]
+[?25h
