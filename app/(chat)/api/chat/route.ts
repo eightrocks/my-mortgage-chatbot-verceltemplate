@@ -193,7 +193,18 @@ export async function POST(request: Request) {
           
           console.log(`Sources before sending to frontend: ${sourcesWithUrls.length}`, 
             sourcesWithUrls.map((s, i) => ({ index: i+1, type: s.type, hasUrl: !!s.url, hasPostUrl: !!s.post_url })));
-          dataStream.writeData({ type: 'sources', sources: sourcesWithUrls });
+          dataStream.writeData({ 
+            type: 'sources', 
+            sources: sourcesWithUrls.map(source => ({
+              type: source.type,
+              title: source.title,
+              url: source.url || undefined,
+              s3_key: source.s3_key || undefined,
+              post_id: source.post_id || undefined,
+              post_url: source.post_url || undefined,
+              created_at: source.created_at || undefined
+            }))
+          });
         }
         
         const result = streamText({

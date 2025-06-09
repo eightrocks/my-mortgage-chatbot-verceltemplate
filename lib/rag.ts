@@ -17,7 +17,7 @@ interface RetrievedContext {
     url?: string;
 }
 
-export interface SourceItem {
+export type SourceItem = {
     type: 'attachment' | 'post' | 'comment';
     title: string;
     url?: string; // For posts, or presigned URL for attachments (generated later)
@@ -25,7 +25,6 @@ export interface SourceItem {
     post_id?: number;
     post_url?: string; // For attachments: link to the original post (from posts table)
     created_at?: string;
-    [key: string]: unknown; // Index signature for JSON compatibility
 }
 
 interface WidgetData {
