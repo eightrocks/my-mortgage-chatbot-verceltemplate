@@ -198,11 +198,11 @@ export async function POST(request: Request) {
             sources: sourcesWithUrls.map(source => ({
               type: source.type,
               title: source.title,
-              url: source.url || undefined,
-              s3_key: source.s3_key || undefined,
-              post_id: source.post_id || undefined,
-              post_url: source.post_url || undefined,
-              created_at: source.created_at || undefined
+              url: source.url || null,
+              s3_key: source.s3_key || null,
+              post_id: source.post_id || null,
+              post_url: source.post_url || null,
+              created_at: source.created_at || null
             }))
           });
         }

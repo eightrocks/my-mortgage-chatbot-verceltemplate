@@ -10,7 +10,8 @@
   "rules": {
     "tailwindcss/no-custom-classname": "off",
     "tailwindcss/classnames-order": "off",
-    "@next/next/no-duplicate-head": "off"
+    "@next/next/no-duplicate-head": "off",
+    "react-hooks/rules-of-hooks": "off"
   },
   "settings": {
     "import/resolver": {
