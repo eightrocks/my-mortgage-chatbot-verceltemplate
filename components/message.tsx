@@ -27,11 +27,13 @@ interface SourceItem {
   url?: string;
   s3_key?: string;
   post_id?: number;
+  post_url?: string; // For attachments: link to the original post
   created_at?: string;
 }
 
 // Function to parse citations and make them clickable - Perplexity style
 function parseCitations(text: string, sources: SourceItem[]): string {
+  console.log('Citation Debug:', { sources: sources.length, text: text.substring(0, 200) });
   const citationRegex = /\[([^\]]+)\]/g;
   
   // First convert basic markdown to HTML
@@ -52,14 +54,31 @@ function parseCitations(text: string, sources: SourceItem[]): string {
       .map((numStr) => {
         const number = parseInt(numStr);
         if (isNaN(number) || number < 1 || number > sources.length) {
+          console.log(`Citation ${numStr} invalid: number=${number}, sources.length=${sources.length}`);
           return `[${numStr}]`; // Return as-is if invalid
         }
         
         const source = sources[number - 1];
-        if (!source) return `[${numStr}]`;
+        if (!source) {
+          console.log(`Citation ${numStr} no source found`);
+          return `[${numStr}]`;
+        }
         
-        // Create clickable link that opens URL directly
-        if (source.url) {
+        console.log(`Citation ${numStr}:`, { 
+          hasUrl: !!source.url, 
+          hasPostUrl: !!source.post_url,
+          type: source.type, 
+          title: source.title,
+          post_id: source.post_id,
+          url: source.url ? source.url.substring(0, 50) + '...' : null,
+          post_url: source.post_url ? source.post_url.substring(0, 50) + '...' : null
+        });
+        
+        // Create clickable link(s) that open URL directly
+        if (source.type === 'attachment' && source.url && source.post_url) {
+          // For attachments, show both attachment link and post link
+          return `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded text-xs font-mono hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5">${numStr}</a><a href="${source.post_url}" target="_blank" rel="noopener noreferrer" class="inline-block bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-1.5 py-0.5 rounded text-xs font-mono hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors mx-0.5">📝</a>`;
+        } else if (source.url) {
           return `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded text-xs font-mono hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5">${numStr}</a>`;
         } else {
           return `<a href="#source-${number}" class="inline-block bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded text-xs font-mono hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors mx-0.5">${numStr}</a>`;

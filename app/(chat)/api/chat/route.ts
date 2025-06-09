@@ -182,6 +182,8 @@ export async function POST(request: Request) {
             })
           );
           
+          console.log(`Sources before sending to frontend: ${sourcesWithUrls.length}`, 
+            sourcesWithUrls.map((s, i) => ({ index: i+1, type: s.type, hasUrl: !!s.url, hasPostUrl: !!s.post_url })));
           dataStream.writeData({ type: 'sources', sources: sourcesWithUrls });
         }
         

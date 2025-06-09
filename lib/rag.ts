@@ -23,6 +23,7 @@ interface SourceItem {
     url?: string; // For posts, or presigned URL for attachments (generated later)
     s3_key?: string; // For attachments
     post_id?: number;
+    post_url?: string; // For attachments: link to the original post (from posts table)
     created_at?: string;
 }
 
@@ -191,6 +192,7 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
                         s3_key: attachment.s3_key,
                         post_id: attachment.post_id,
                         created_at: attachment.created_at
+                        // post_url will be populated later during ordering
                     });
                 }
             });
@@ -222,6 +224,45 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         console.error('Error in vector search:', error);
     }
     
+    // Fetch missing post URLs for attachments that aren't in RAG results
+    const attachmentPostIds = sources
+        .filter(s => s.type === 'attachment' && s.post_id)
+        .map(s => s.post_id!);
+    
+    const existingPostIds = sources
+        .filter(s => s.type === 'post' && s.post_id)
+        .map(s => s.post_id!);
+    
+    const missingPostIds = attachmentPostIds.filter(id => !existingPostIds.includes(id));
+    
+    // Fetch missing posts from database
+    const missingPosts: SourceItem[] = [];
+    if (missingPostIds.length > 0) {
+        try {
+            const { data: missingPostsData } = await supabase
+                .from('posts')
+                .select('id, title, url')
+                .in('id', missingPostIds);
+            
+            if (missingPostsData) {
+                missingPostsData.forEach(post => {
+                    missingPosts.push({
+                        type: 'post',
+                        title: post.title,
+                        url: post.url,
+                        post_id: post.id
+                    });
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching missing posts for attachments:', error);
+        }
+    }
+    
+    // Combine all sources: original + missing posts
+    const allSources = [...sources, ...missingPosts];
+    console.log(`Total sources after fetching missing posts: ${allSources.length} (original: ${sources.length}, missing: ${missingPosts.length})`);
+
     // Ensure sources and context are in the same order for easy citation
     const orderedSources: SourceItem[] = [];
     const orderedContext: RetrievedContext[] = [];
@@ -231,7 +272,7 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         orderedContext.push(contextItem);
         
         // Find corresponding source
-        const matchingSource = sources.find(source => {
+        const matchingSource = allSources.find(source => {
             if (source.type === 'attachment' && contextItem.s3_key) {
                 return source.s3_key === contextItem.s3_key;
             }
@@ -242,15 +283,32 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         });
         
         if (matchingSource) {
-            orderedSources.push(matchingSource);
+            // If it's an attachment source, try to find the related post URL
+            if (matchingSource.type === 'attachment' && matchingSource.post_id && !matchingSource.post_url) {
+                const relatedPost = allSources.find(source => 
+                    source.type === 'post' && source.post_id === matchingSource.post_id
+                );
+                orderedSources.push({
+                    ...matchingSource,
+                    post_url: relatedPost?.url
+                });
+            } else {
+                orderedSources.push(matchingSource);
+            }
         } else {
             // Create a fallback source if no match found
             if (contextItem.s3_key) {
+                // For attachments, find the post URL using post_id
+                const relatedPost = allSources.find(source => 
+                    source.type === 'post' && source.post_id === contextItem.post_id
+                );
+                
                 orderedSources.push({
                     type: 'attachment',
                     title: contextItem.s3_key.split('/').pop() || contextItem.s3_key,
                     s3_key: contextItem.s3_key,
-                    post_id: contextItem.post_id
+                    post_id: contextItem.post_id,
+                    post_url: relatedPost?.url // Link to the original post
                 });
             } else if (contextItem.url) {
                 orderedSources.push({
@@ -335,6 +393,7 @@ export function formatRAGContextWithSources(context: RetrievedContext[], sources
             result += `[${sourceNum}] ${source.title} (${source.type})\n`;
         });
         result += `\nWhen referencing information from these sources, use [1], [2], [3] etc. in your response.\n\n`;
+        console.log(`AI Prompt - Sources section:`, sources.map((s, i) => ({ num: i+1, title: s.title, type: s.type })));
     }
     
     // Add context content with source numbers for easy citation
