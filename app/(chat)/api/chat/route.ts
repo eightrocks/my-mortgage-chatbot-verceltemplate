@@ -158,6 +158,11 @@ export async function POST(request: Request) {
         const { context, widgets, sources, dbStats } = await getRAGContext(userMessageText);
         const ragContext = formatRAGContextWithSources(context, sources, dbStats);
         
+        // Debug logging to see if RAG is working
+        console.log(`RAG Debug - Query: "${userMessageText}"`);
+        console.log(`RAG Debug - Sources found: ${sources.length}`);
+        console.log(`RAG Debug - Context items: ${context.length}`);
+        
         // Send sources to frontend for Perplexica-style display
         if (sources.length > 0) {
           // Generate presigned URLs for attachment sources on server-side

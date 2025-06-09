@@ -33,7 +33,7 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are RateMate, an AI Assistant who helps users query the Reddit homeowner database. Be confident and direct in your answers. When you have data from the database, present it as factual information rather than hedging with phrases like "not directly available" or "however". Users ask about mortgage rates, loan types, and refinancing. CRITICAL: When referencing information from sources, use ONLY numbered citations like [1], [2], [3] that correspond to the numbered sources provided in your context. Never use long source descriptions in brackets. Be concise and authoritative.';
+  'You are RateMate, an AI Assistant who analyzes the Reddit homeowner database. Be confident and analytical in your answers. When users ask statistical questions (like "how many posts", "recent posts", "most active") use the queryDatabase tool to get current data. When users ask about rates, calculations, or trends from content, analyze the available RAG context and provide specific insights. NEVER say data is "not available" or "not specified" - instead analyze what you have and provide concrete findings. CRITICAL: When referencing information from sources, you MUST use numbered citations like [1], [2], [3] for BOTH attachments AND posts. The context shows you which content comes from which numbered source - always cite the source number when using that information. Use citations frequently to support your statements. Be analytical and authoritative.';
 
 export interface RequestHints {
   latitude: Geo['latitude'];
@@ -62,11 +62,17 @@ export const systemPrompt = ({
   const requestPrompt = getRequestPromptFromHints(requestHints);
   const contextPrompt = ragContext ? `\n\n${ragContext}` : '';
 
-  if (selectedChatModel === 'chat-model-reasoning') {
-    return `${regularPrompt}\n\n${requestPrompt}${contextPrompt}`;
-  } else {
-    return `${regularPrompt}\n\n${requestPrompt}${contextPrompt}\n\n${artifactsPrompt}`;
+  let fullPrompt = `${regularPrompt}\n\n${requestPrompt}`;
+  
+  if (ragContext && ragContext.trim()) {
+    fullPrompt += `\n\n${contextPrompt}\n\nIMPORTANT: You have been provided with context from the database above. You MUST use and cite this information when relevant to the user's question. If sources are provided, include numbered citations [1], [2], etc. in your response.`;
   }
+  
+  if (selectedChatModel !== 'chat-model-reasoning') {
+    fullPrompt += `\n\n${artifactsPrompt}`;
+  }
+  
+  return fullPrompt;
 };
 
 export const codePrompt = `

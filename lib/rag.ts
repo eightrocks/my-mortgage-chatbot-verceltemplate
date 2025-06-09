@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSION = 1536;
 const SIMILARITY_THRESHOLD = 0.3; // Increased threshold for better performance
-const MAX_RESULTS_PER_TABLE = 2; // Limit to 2 per table for cleaner citations
+const MAX_RESULTS_PER_TABLE = 3; // Get 3 per table for better data coverage
 const MAX_CONTEXT_LENGTH = 3000;
 
 interface RetrievedContext {
@@ -222,7 +222,48 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         console.error('Error in vector search:', error);
     }
     
-    return { context: results, widgets: widgetData, sources };
+    // Ensure sources and context are in the same order for easy citation
+    const orderedSources: SourceItem[] = [];
+    const orderedContext: RetrievedContext[] = [];
+    
+    // First add all results and build parallel ordered arrays
+    results.forEach(contextItem => {
+        orderedContext.push(contextItem);
+        
+        // Find corresponding source
+        const matchingSource = sources.find(source => {
+            if (source.type === 'attachment' && contextItem.s3_key) {
+                return source.s3_key === contextItem.s3_key;
+            }
+            if (source.type === 'post' && contextItem.post_id) {
+                return source.post_id === contextItem.post_id;
+            }
+            return false;
+        });
+        
+        if (matchingSource) {
+            orderedSources.push(matchingSource);
+        } else {
+            // Create a fallback source if no match found
+            if (contextItem.s3_key) {
+                orderedSources.push({
+                    type: 'attachment',
+                    title: contextItem.s3_key.split('/').pop() || contextItem.s3_key,
+                    s3_key: contextItem.s3_key,
+                    post_id: contextItem.post_id
+                });
+            } else if (contextItem.url) {
+                orderedSources.push({
+                    type: 'post',
+                    title: contextItem.source.replace('Reddit Post: ', ''),
+                    url: contextItem.url,
+                    post_id: contextItem.post_id
+                });
+            }
+        }
+    });
+    
+    return { context: orderedContext, widgets: widgetData, sources: orderedSources };
 }
 
 async function getDatabaseStats(): Promise<Record<string, number>> {
@@ -296,10 +337,17 @@ export function formatRAGContextWithSources(context: RetrievedContext[], sources
         result += `\nWhen referencing information from these sources, use [1], [2], [3] etc. in your response.\n\n`;
     }
     
-    // Add context content
+    // Add context content with source numbers for easy citation
     if (context.length > 0) {
         result += `CONTEXT FROM r/firsttimehomebuyer:\n\n`;
-        let contextText = context.map(item => `${item.source}\n${item.content}`).join('\n\n');
+        
+        // Since sources and context are now in the same order, we can directly map
+        const contextWithSourceNumbers = context.map((item, index) => {
+            const sourceNum = index + 1;
+            return `[${sourceNum}] ${item.source}\n${item.content}`;
+        });
+        
+        let contextText = contextWithSourceNumbers.join('\n\n');
         if (contextText.length > MAX_CONTEXT_LENGTH) {
             contextText = contextText.substring(0, MAX_CONTEXT_LENGTH) + "...";
         }

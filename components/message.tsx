@@ -197,38 +197,6 @@ const PurePreviewMessage = ({
                         )}
                       </div>
 
-                      {/* Sources List - Below the message */}
-                      {message.role === 'assistant' && sources && sources.length > 0 && (
-                        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border">
-                          <div className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Sources</div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {sources.map((source, index) => (
-                              <a
-                                key={index}
-                                href={source.url || '#'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                id={`source-${index + 1}`}
-                                className={cn(
-                                  "flex items-center gap-2 p-2 bg-white dark:bg-gray-700 rounded border transition-colors text-sm",
-                                  source.url 
-                                    ? "hover:bg-gray-50 dark:hover:bg-gray-600" 
-                                    : "cursor-not-allowed opacity-50"
-                                )}
-                                onClick={!source.url ? (e) => e.preventDefault() : undefined}
-                              >
-                                <span className="font-mono text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1 rounded">
-                                  {index + 1}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="truncate font-medium">{source.title}</div>
-                                  <div className="text-xs text-gray-500 capitalize">{source.type}</div>
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 }
