@@ -163,6 +163,15 @@ export async function POST(request: Request) {
         console.log(`RAG Debug - Sources found: ${sources.length}`);
         console.log(`RAG Debug - Context items: ${context.length}`);
         
+        // Debug the full system prompt being sent
+        const finalSystemPrompt = systemPrompt({ selectedChatModel, requestHints, ragContext });
+        console.log(`DEBUG - Full system prompt length: ${finalSystemPrompt.length}`);
+        console.log(`DEBUG - System prompt includes RAG context: ${finalSystemPrompt.includes('SOURCES FOR CITATION')}`);
+        console.log(`DEBUG - System prompt includes citation instructions: ${finalSystemPrompt.includes('CRITICAL: If you use the queryDatabase tool')}`);
+        if (sources.length > 0) {
+          console.log(`DEBUG - First source in prompt: [1] ${sources[0]?.title}`);
+        }
+        
         // Send sources to frontend for Perplexica-style display
         if (sources.length > 0) {
           // Generate presigned URLs for attachment sources on server-side

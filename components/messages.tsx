@@ -45,10 +45,15 @@ function PureMessages({
   const currentSources = useMemo(() => {
     if (!streamData?.length) return [];
     
+    // Debug: log all sources data in streamData
+    const allSourcesData = streamData.filter(item => item?.type === 'sources');
+    console.log('All sources in streamData:', allSourcesData);
+    console.log('StreamData length:', streamData.length);
+    
     // Find the latest sources data
-    const sourcesData = streamData
-      .filter(item => item?.type === 'sources')
-      .pop();
+    const sourcesData = allSourcesData.pop();
+    console.log('Selected sources data:', sourcesData);
+    console.log('Final sources array:', sourcesData?.sources || []);
     
     return sourcesData?.sources || [];
   }, [streamData]);

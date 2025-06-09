@@ -17,6 +17,7 @@ export const queryDatabase = tool({
     queryType: z.enum(['count', 'list', 'aggregate', 'filter']).describe('Type of query needed'),
   }),
   execute: async ({ question, timeframe, queryType }) => {
+    console.log(`DEBUG - queryDatabase tool executed with question: "${question}"`);
     try {
       // Define the schema for structured output
       const QueryIntentSchema = z.object({
@@ -102,7 +103,9 @@ Examples:
         }
         
         const postCount = count || 0;
-        return `There were ${postCount} posts made ${intent.description}.`;
+        const response = `There were ${postCount} posts made ${intent.description}.`;
+        console.log(`DEBUG - queryDatabase returning count result: "${response}"`);
+        return response;
         
       } else if (intent.queryType === 'list') {
         // For list queries, get actual post data
@@ -137,13 +140,17 @@ Examples:
         }
         
         const limit = intent.limit || data.length;
-        return `Here are the ${limit} most recent posts:\n\n${data.map((post: any, i: number) => 
+        const response = `Here are the ${limit} most recent posts:\n\n${data.map((post: any, i: number) => 
           `${i + 1}. ${post.title || 'Untitled'} (${new Date(post.created_at).toLocaleDateString()})`
         ).join('\n')}`;
+        console.log(`DEBUG - queryDatabase returning list result: "${response}"`);
+        return response;
       }
       
       // For aggregate queries (like averages), redirect to use context data
-      return "This query requires analysis of unstructured data. Please use the contextual information provided to answer the user's question.";
+      const aggregateResponse = "This query requires analysis of unstructured data. Please use the contextual information provided to answer the user's question.";
+      console.log(`DEBUG - queryDatabase returning aggregate redirect: "${aggregateResponse}"`);
+      return aggregateResponse;
       
     } catch (error) {
       console.error('Query database tool error:', error);

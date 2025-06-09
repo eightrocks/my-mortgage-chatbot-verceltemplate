@@ -321,7 +321,21 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         }
     });
     
-    return { context: orderedContext, widgets: widgetData, sources: orderedSources };
+    // Ensure all attachment sources have post_url populated
+    const sourcesWithPostUrls = allSources.map(source => {
+        if (source.type === 'attachment' && source.post_id && !source.post_url) {
+            const relatedPost = allSources.find(s => 
+                s.type === 'post' && s.post_id === source.post_id
+            );
+            return {
+                ...source,
+                post_url: relatedPost?.url
+            };
+        }
+        return source;
+    });
+    
+    return { context: orderedContext, widgets: widgetData, sources: sourcesWithPostUrls };
 }
 
 async function getDatabaseStats(): Promise<Record<string, number>> {
