@@ -20,16 +20,7 @@ import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
-
-interface SourceItem {
-  type: 'attachment' | 'post' | 'comment';
-  title: string;
-  url?: string;
-  s3_key?: string;
-  post_id?: number;
-  post_url?: string; // For attachments: link to the original post
-  created_at?: string;
-}
+import type { SourceItem } from '@/lib/rag';
 
 // Function to parse citations and make them clickable - Perplexity style
 function parseCitations(text: string, sources: SourceItem[]): string {
