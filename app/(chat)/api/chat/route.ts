@@ -281,8 +281,8 @@ export async function POST(request: Request) {
                 });
               } catch (error) {
                 console.error('Failed to save chat:', {
-                  error: error?.message || error,
-                  stack: error?.stack,
+                  error: error instanceof Error ? error.message : String(error),
+                  stack: error instanceof Error ? error.stack : undefined,
                   chatId: id,
                   userId: session?.user?.id,
                   timestamp: new Date().toISOString()
@@ -304,8 +304,8 @@ export async function POST(request: Request) {
       },
       onError: (error) => {
         console.error('Chat stream error:', {
-          error: error?.message || error,
-          stack: error?.stack,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
           chatId: id,
           userId: session?.user?.id,
