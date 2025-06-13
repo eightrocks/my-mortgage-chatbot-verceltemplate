@@ -114,9 +114,9 @@ Examples:
           .select('id, title, created_at, url')
           .order('created_at', { ascending: false });
         
-        if (intent.limit) {
-          supabaseQuery = supabaseQuery.limit(intent.limit);
-        }
+        // Always apply a reasonable limit, defaulting to 10 if none specified
+        const queryLimit = intent.limit || 10;
+        supabaseQuery = supabaseQuery.limit(queryLimit);
         
         if (intent.timeframe) {
           const dateFilter = parseTimeframe(intent.timeframe);
@@ -139,7 +139,7 @@ Examples:
           return `No posts found ${intent.description}.`;
         }
         
-        const limit = intent.limit || data.length;
+        const limit = intent.limit || 10;
         const response = `Here are the ${limit} most recent posts:\n\n${data.map((post: any, i: number) => 
           `${i + 1}. ${post.title || 'Untitled'} (${new Date(post.created_at).toLocaleDateString()})`
         ).join('\n')}`;
