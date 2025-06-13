@@ -179,7 +179,7 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
                     widgetData.attachments.push({
                         s3_key: attachment.s3_key,
                         post_id: attachment.post_id,
-                        extracted_text: attachment.extracted_text,
+                        extracted_text: attachment.extracted_text || '',
                         created_at: attachment.created_at
                     });
                     

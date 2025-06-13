@@ -155,7 +155,18 @@ export async function POST(request: Request) {
           .map(part => part.text)
           .join(' ');
         
+        console.log('Starting RAG context retrieval...', { timestamp: new Date().toISOString() });
+        const ragStartTime = Date.now();
+        
         const { context, widgets, sources, dbStats } = await getRAGContext(userMessageText);
+        
+        const ragEndTime = Date.now();
+        console.log('RAG context retrieval completed:', {
+          duration: ragEndTime - ragStartTime,
+          contextItems: context.length,
+          sources: sources.length,
+          timestamp: new Date().toISOString()
+        });
         const ragContext = formatRAGContextWithSources(context, sources, dbStats);
         
         // Debug logging to see if RAG is working
@@ -268,8 +279,14 @@ export async function POST(request: Request) {
                     },
                   ],
                 });
-              } catch (_) {
-                console.error('Failed to save chat');
+              } catch (error) {
+                console.error('Failed to save chat:', {
+                  error: error?.message || error,
+                  stack: error?.stack,
+                  chatId: id,
+                  userId: session?.user?.id,
+                  timestamp: new Date().toISOString()
+                });
               }
             }
           },
@@ -285,7 +302,15 @@ export async function POST(request: Request) {
           sendReasoning: true,
         });
       },
-      onError: () => {
+      onError: (error) => {
+        console.error('Chat stream error:', {
+          error: error?.message || error,
+          stack: error?.stack,
+          timestamp: new Date().toISOString(),
+          chatId: id,
+          userId: session?.user?.id,
+          messageId: message.id
+        });
         return 'Oops, an error occurred!';
       },
     });
