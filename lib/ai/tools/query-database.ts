@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { tool } from 'ai';
 import { createServerSupabaseClient } from '../../supabase';
 import OpenAI from 'openai';
-import { zodResponseFormat } from 'openai/helpers/zod';
+import { zodTextFormat } from 'openai/helpers/zod';
 
 export const queryDatabase = tool({
   description: `
@@ -33,9 +33,9 @@ export const queryDatabase = tool({
         apiKey: process.env.OPENAI_API_KEY
       });
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
+      const response = await openai.responses.parse({
+        model: "gpt-4o-2024-08-06",
+        input: [
           {
             role: "system",
             content: `You are a SQL query intent parser. Analyze the user's question and extract the intent.
@@ -52,17 +52,12 @@ Examples:
             content: question
           }
         ],
-        response_format: zodResponseFormat(QueryIntentSchema, "query_intent"),
-        temperature: 0
+        text: {
+          format: zodTextFormat(QueryIntentSchema, "query_intent")
+        }
       });
 
-      let intent;
-      try {
-        intent = JSON.parse(completion.choices[0].message.content || '{}');
-      } catch {
-        // Fallback if parsing fails
-        intent = { queryType: 'count', timeframe: null, limit: null, description: 'total' };
-      }
+      const intent = response.output_parsed || { queryType: 'count', timeframe: null, limit: null, description: 'total', year: null };
 
       console.log('Parsed intent:', intent);
 
@@ -143,19 +138,26 @@ Examples:
         const response = `Here are the ${limit} most recent posts:\n\n${data.map((post: any, i: number) => 
           `${i + 1}. ${post.title || 'Untitled'} (${new Date(post.created_at).toLocaleDateString()})`
         ).join('\n')}`;
+        
+        // Validate if this SQL result actually answers the user's question
+        const isRelevant = await validateQueryRelevance(question, response);
+        if (!isRelevant) {
+          console.log(`DEBUG - queryDatabase result deemed irrelevant, redirecting to RAG context`);
+          return "This database query doesn't directly answer your question. Using contextual information to provide the answer.";
+        }
+        
         console.log(`DEBUG - queryDatabase returning list result: "${response}"`);
         return response;
       }
       
       // For aggregate queries (like averages), redirect to use context data
-      const aggregateResponse = "This query requires analysis of unstructured data. Please use the contextual information provided to answer the user's question.";
-      console.log(`DEBUG - queryDatabase returning aggregate redirect: "${aggregateResponse}"`);
-      return aggregateResponse;
+      console.log(`DEBUG - queryDatabase returning aggregate redirect for: "${question}"`);
+      return "Unable to analyze this query with structured data. Using contextual information to provide the answer.";
       
     } catch (error) {
       console.error('Query database tool error:', error);
       // For errors, also redirect to contextual information
-      return "Unable to execute structured query. Please use the contextual information provided to answer the user's question.";
+      return "Unable to execute structured query. Using contextual information to provide the answer.";
     }
   }
 });
@@ -266,4 +268,57 @@ function extractLimit(question: string): number | null {
 function extractDaysBack(question: string): number | null {
   const daysMatch = question.match(/(\d+)\s*days?/);
   return daysMatch ? parseInt(daysMatch[1]) : null;
+}
+
+async function validateQueryRelevance(originalQuestion: string, sqlResult: string): Promise<boolean> {
+  try {
+    const ValidationSchema = z.object({
+      isRelevant: z.boolean().describe('Whether the SQL result actually answers the original question'),
+      reasoning: z.string().describe('Brief explanation of why it is or isn\'t relevant')
+    });
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+
+    const response = await openai.responses.parse({
+      model: "gpt-4o-2024-08-06",
+      input: [
+        {
+          role: "system",
+          content: `Determine if the SQL result actually answers the user's original question.
+          
+Examples:
+- Question: "Where are the most expensive loans?" + Result: "Recent posts by date" = NOT RELEVANT
+- Question: "How many posts this week?" + Result: "5 posts this week" = RELEVANT  
+- Question: "What are the best rates?" + Result: "Most recent posts" = NOT RELEVANT`
+        },
+        {
+          role: "user",
+          content: `Original Question: "${originalQuestion}"
+
+SQL Result: "${sqlResult}"
+
+Does this SQL result actually answer the user's question?`
+        }
+      ],
+      text: {
+        format: zodTextFormat(ValidationSchema, "relevance_check")
+      }
+    });
+
+    const validation = response.output_parsed;
+    if (!validation) {
+      console.log('Query relevance validation failed - no output parsed');
+      return true; // Default to allowing if parsing fails
+    }
+    
+    console.log(`Query relevance validation:`, validation);
+    return validation.isRelevant;
+    
+  } catch (error) {
+    console.error('Error validating query relevance:', error);
+    // Default to allowing the query if validation fails
+    return true;
+  }
 }
