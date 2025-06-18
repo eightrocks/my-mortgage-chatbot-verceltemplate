@@ -41,21 +41,22 @@ function PureMessages({
     status,
   });
 
-  // Extract sources from stream data for Perplexica-style display
-  const currentSources = useMemo(() => {
-    if (!streamData?.length) return [];
+  // Create a mapping of message ID to sources for proper citation handling
+  const messageToSources = useMemo(() => {
+    if (!streamData?.length) return new Map();
     
-    // Debug: log all sources data in streamData
+    const sourcesMap = new Map();
     const allSourcesData = streamData.filter(item => item?.type === 'sources');
-    console.log('All sources in streamData:', allSourcesData);
-    console.log('StreamData length:', streamData.length);
     
-    // Find the latest sources data
-    const sourcesData = allSourcesData.pop();
-    console.log('Selected sources data:', sourcesData);
-    console.log('Final sources array:', sourcesData?.sources || []);
+    // Build mapping of message ID to sources
+    allSourcesData.forEach(sourcesData => {
+      if (sourcesData.messageId && sourcesData.sources) {
+        sourcesMap.set(sourcesData.messageId, sourcesData.sources);
+      }
+    });
     
-    return sourcesData?.sources || [];
+    console.log('Message to sources mapping:', sourcesMap);
+    return sourcesMap;
   }, [streamData]);
 
   return (
@@ -82,7 +83,7 @@ function PureMessages({
           requiresScrollPadding={
             hasSentMessage && index === messages.length - 1
           }
-          sources={currentSources}
+          sources={messageToSources.get(message.id) || []}
         />
       ))}
 

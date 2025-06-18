@@ -44,8 +44,8 @@ function parseCitations(text: string, sources: SourceItem[]): string {
     const linksHtml = numbers
       .map((numStr) => {
         const number = parseInt(numStr);
-        if (isNaN(number) || number < 1 || number > sources.length) {
-          console.log(`Citation ${numStr} invalid: number=${number}, sources.length=${sources.length}`);
+        if (isNaN(number) || number < 1) {
+          console.log(`Citation ${numStr} invalid: number=${number}`);
           return `[${numStr}]`; // Return as-is if invalid
         }
         

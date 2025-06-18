@@ -183,6 +183,9 @@ export async function POST(request: Request) {
           console.log(`DEBUG - First source in prompt: [1] ${sources[0]?.title}`);
         }
         
+        // Generate message ID for the assistant response that will use these sources
+        const nextMessageId = generateUUID();
+        
         // Send sources to frontend for Perplexica-style display
         if (sources.length > 0) {
           // Generate presigned URLs for attachment sources on server-side
@@ -205,7 +208,8 @@ export async function POST(request: Request) {
           console.log(`Sources before sending to frontend: ${sourcesWithUrls.length}`, 
             sourcesWithUrls.map((s, i) => ({ index: i+1, type: s.type, hasUrl: !!s.url, hasPostUrl: !!s.post_url })));
           dataStream.writeData({ 
-            type: 'sources', 
+            type: 'sources',
+            messageId: nextMessageId,
             sources: sourcesWithUrls.map(source => ({
               type: source.type,
               title: source.title,
@@ -236,7 +240,7 @@ export async function POST(request: Request) {
                   'suggestWidgets',
                 ],
           experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
+          experimental_generateMessageId: () => nextMessageId,
           tools: {
             getWeather,
             createDocument: createDocument({ session, dataStream }),
