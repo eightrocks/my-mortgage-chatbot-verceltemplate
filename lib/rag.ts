@@ -335,7 +335,22 @@ async function vectorSearch(queryEmbedding: number[], limitPerTable: number = MA
         return source;
     });
     
-    return { context: orderedContext, widgets: widgetData, sources: sourcesWithPostUrls };
+    // Deduplicate: remove post sources that are already referenced by attachments
+    const attachmentPostUrls = sourcesWithPostUrls
+        .filter(s => s.type === 'attachment' && s.post_url)
+        .map(s => s.post_url);
+    
+    const deduplicatedSources = sourcesWithPostUrls.filter(source => {
+        // If it's a post and an attachment already references this post URL, remove it
+        if (source.type === 'post' && source.url && attachmentPostUrls.includes(source.url)) {
+            return false;
+        }
+        return true;
+    });
+    
+    console.log(`Sources after deduplication: ${deduplicatedSources.length} (before: ${sourcesWithPostUrls.length})`);
+    
+    return { context: orderedContext, widgets: widgetData, sources: deduplicatedSources };
 }
 
 async function getDatabaseStats(): Promise<Record<string, number>> {
